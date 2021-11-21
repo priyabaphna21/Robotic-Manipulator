@@ -1,3 +1,4 @@
+
 /* USER CODE BEGIN Header */
 /**
  ******************************************************************************
@@ -29,11 +30,12 @@
 #include "stm32f1xx.h"
 #include <math.h>
 #include <stdlib.h>
+
+#define pi 3.1415
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 int _write(int32_t file, uint8_t *ptr, int32_t len) {
 	for (int i = 0; i < len; i++) {
 		LL_USART_TransmitData8(USART1, *(ptr + i));
@@ -41,6 +43,7 @@ int _write(int32_t file, uint8_t *ptr, int32_t len) {
 	}
 	return len;
 }
+
 
 /* USER CODE END PTD */
 
@@ -57,12 +60,16 @@ int _write(int32_t file, uint8_t *ptr, int32_t len) {
 CAN_HandleTypeDef hcan;
 
 /* USER CODE BEGIN PV */
+
 CAN_FilterTypeDef sFilterConfig, sFilterConfig1;//struct containing filter settings
 CAN_RxHeaderTypeDef RxMessage;	 //struct for recieved data frame
 CAN_TxHeaderTypeDef TxMessage;   // struct for transmitted dataframe
+
+
 uint8_t rxData[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };	//array for recieved data (8 bytes)
 uint8_t txData[8] = { 0, 20, 0, 0, 0, 0, 0, 0 };
 uint32_t usedmailbox;
+
 float T1;
 double T2;
 float IMU_1 = 0;
@@ -74,6 +81,7 @@ double Error_2 = 0;
 float dt = 0.01;
 int PWM_1 = 0;
 double PWM_2 = 0;
+
 
 /* USER CODE END PV */
 
@@ -88,6 +96,7 @@ static void MX_CAN_Init(void);
 
 void Ports_Init(void);
 void Timers_Init(void);
+void Inverse_Kinematics(float X_0, float y);
 long map(long x, long in_min, long in_max, long out_min, long out_max);//struct containing CAN init settings
 unsigned char Conv(float val);
 
@@ -105,7 +114,7 @@ unsigned char Conv(float val);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	printf("Send pitch");
+
 	float q[4];
 	float quatRadianAccuracy;
 
@@ -153,7 +162,7 @@ int main(void)
 	LL_USART_EnableIT_RXNE(USART1);
 
 	BNO080_Initialization();
-	BNO080_enableRotationVector(10.);
+	BNO080_enableRotationVector(20);
 
 	TxMessage.IDE = CAN_ID_STD;				//standard identifier format (11bit)
 	TxMessage.StdId = 0x446;								//identifier value
@@ -195,13 +204,39 @@ int main(void)
 
 			Quaternion_Update(&q[0]);
 
-			//printf("%d, %d, %d,\n", (int) (BNO080_Roll), (int) (BNO080_Pitch),(int) (BNO080_Yaw));
+			int pitch_F = BNO080_Pitch;
 
-			T1 = 60;
+			printf("%d \n",pitch_F);
+
+			txData[0] = pitch_F & 0x000000FF;
+			txData[1] = (pitch_F >> 8) & 0x000000FF;
+			txData[2] = (pitch_F >> 16) & 0x000000FF;
+			txData[3] = (pitch_F >> 24) & 0x000000FF;
+
+			//USART1 -> DR = BNO080_Pitch;
+			//while((USART1 ->SR & USART_SR_TXE) == 0); // TXE -> TRANSMIT EMPTY
+
+			//printf("Hi from tx \n");
+
+
+
+			// printf("%d, %d, %d,\n", (int) (BNO080_Roll), (int)BNO080_Pitch,(int) (BNO080_Yaw));
+
+
+			 HAL_CAN_AddTxMessage(&hcan, &TxMessage, txData, &usedmailbox);
+
+
+			// printf("%d, %d, %d,\n", (int) (BNO080_Roll), (int) (BNO080_Pitch),(int) (BNO080_Yaw));
+
+			/*
+			 * *******************************************************************
+
+
+			Inverse_Kinematics(2, 3);
 
 			// IMU VALUES
 			float Curr_pos_1 = BNO080_Pitch;
-			double Curr_Pos_2 = abs((IMU_1 - IMU_2));
+			double Curr_Pos_2 = abs((BNO080_Pitch - IMU_2));
 
 			// ERROR
 			Error_1 = T1 - Curr_pos_1;
@@ -251,52 +286,14 @@ int main(void)
 				TIM4->CCR1 = PWM_1;
 			}
 
-			printf("PWM 1: %d  ", abs(PWM_1));
+		//	printf("PWM 1: %d  ", abs(PWM_1));
 
 			TIM4->CCR1 = abs(PWM_1);
 
-			//BNO080_Pitch = (uint8_t)BNO080_Pitch;
-            int pi=BNO080_Pitch;
-
-
-			txData[0] = pi & 0x000000FF;
-			txData[1]= (pi>>8) & 0x000000FF;
-			txData[2] =(pi>>16) & 0x000000FF;
-			txData[3]= (pi>>24) & 0x000000FF;
-
-			int pit;
-			pit=(txData[0]|txData[1]>>8 | txData[2]>>16 | txData[3]>>24);
-			printf("hello");
-
-			printf("%d \n ",pit);
-
-
-
-
-
-			//float Final_Pitch = (p[0]<<24 | (p[1]<<16) | (p[2]<<8) | (p[3]));
-
-			//unsigned char FP = Conv(BNO080_Pitch);
-
-			//uint8_t FP = map(BNO080_Pitch, -65535, 65535, -255 ,255);
-
-
-
-			//uint8_t Final_Pitch;
-
-			/*
-			for(int j = 0; j<4; j++)
-			{
-				Final_Pitch = BNO080_Pitch<<(j*8);
-			}
 			*/
 
-			//printf("Final Pitch = %d ", (int) Final_Pitch);
 
-
-			// HAL_Delay(10);
-			HAL_CAN_AddTxMessage(&hcan, &TxMessage, txData, &usedmailbox);
-            HAL_Delay(100);
+            //HAL_Delay(100);
 		}
 
     /* USER CODE END WHILE */
@@ -569,7 +566,7 @@ static void MX_GPIO_Init(void)
   LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
 
   /**/
-  LL_GPIO_ResetOutputPin(GPIOA, LL_GPIO_PIN_6|LL_GPIO_PIN_7|LL_GPIO_PIN_11|LL_GPIO_PIN_12);
+  LL_GPIO_ResetOutputPin(GPIOA, LL_GPIO_PIN_6|LL_GPIO_PIN_7);
 
   /**/
   LL_GPIO_ResetOutputPin(GPIOB, LL_GPIO_PIN_12);
@@ -587,7 +584,7 @@ static void MX_GPIO_Init(void)
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /**/
-  GPIO_InitStruct.Pin = LL_GPIO_PIN_6|LL_GPIO_PIN_7|LL_GPIO_PIN_11|LL_GPIO_PIN_12;
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_6|LL_GPIO_PIN_7;
   GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
   GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
@@ -661,6 +658,79 @@ void Timers_Init(void) {
 }
 
 
+// INVERSE KINEMATICS | PARAMETERS -> DESIRED
+
+void Inverse_Kinematics(float X_0, float y)
+{
+
+  // LINK LENGTHS
+
+  float a1 = 5; // LINK LENTGH 1
+  float a2 = 2; // LINK LENGTH 2
+
+  // WORKSPACE PROBLEM
+
+  if(((y*y)+(X_0*X_0)) > ((a1+a2)*(a1+a2)))
+  {
+
+        X_0 = (a1+a2)*(X_0)/(sqrt((X_0*X_0)+(y*y)));
+        y = (a1+a2)*(y)/(sqrt((X_0*X_0)+(y*y)));
+  }
+
+  else
+  {
+         X_0 += 0;
+         y += 0;
+  }
+
+
+  // INVERSE KINEMATICS
+
+  double r = sqrt(pow(X_0, 2) + pow(y, 2));
+ // Serial.println("R= ");
+ // Serial.println(r);
+  double phi1;
+  double phi2;
+  double phi3;
+
+  // ELBOW UP FOR ACTUAL ARM
+
+  if(X_0 < 0 )
+  {
+     phi1 = -acos((pow(a1, 2) + pow(r, 2) - pow(a2, 2)) / (2*a1*r));
+
+                 phi2 = atan(y / (X_0 + 0.0000001)) + pi;
+                 //phi2 = pi - atan(y / (X_0 + 0.0000001)) ;
+                 phi3 = -acos((pow(a1, 2) + pow(a2, 2) - pow(r, 2)) / (2*a1*a2));
+  }
+
+  else
+  {
+    phi1 = acos((pow(a1, 2) + pow(r, 2) - pow(a2, 2)) / (2*a1*r));
+
+                phi2 = atan(y / (X_0 + 0.0000001));
+                phi3 = acos((pow(a1, 2) + pow(a2, 2) - pow(r, 2)) / (2*a1*a2));
+  }
+ // Serial.println("phi1 :");
+ // Serial.print(phi1);
+  // NOTE: LINE 252 & 259 -> X_0 + 0.0000001 -> 0.0000001 IS ADDED TO PREVENT ERROR IN CODE WHEN X_0 = 0
+
+  // JOINT ANGLES
+
+   T1 = (phi1 + phi2)*(180/pi);
+   T2 = (phi3 - pi)*(180/pi);
+
+  // Serial.println("T1 = ");
+  // Serial.println(T1);
+
+  // Serial.println("T2 = ");
+  // Serial.println(T2);
+
+
+
+}
+
+
 unsigned char Conv(float val)
 {
 	unsigned char ret;
@@ -708,3 +778,4 @@ void assert_failed(uint8_t *file, uint32_t line)
 #endif /* USE_FULL_ASSERT */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
